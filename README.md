@@ -1,13 +1,13 @@
 # OurMallEU
 
 ## Overview
-OurMallEU is a SwiftUI multi-vendor ecommerce app prototype. It includes a splash screen, a searchable and filterable product catalog, configurable product detail pages, a multi-vendor cart, checkout and payment flows, and an order history experience with tracking, cancellation, and refund feedback. `AppState` is the central source of truth for products, cart state, checkout totals, payment progress, and stored orders.
+OurMallEU is a SwiftUI multi-vendor ecommerce app prototype. It includes a splash screen, a searchable and filterable product catalog, configurable product detail pages, a multi-vendor cart, checkout and payment flows, and an order history experience with tracking, cancellation, and refund feedback. Shared app state is coordinated through `AppState`, which is now split into focused files for catalog, cart, navigation, payment, orders, and derived state.
 
 ## Technologies and Architecture
-The project is built with Swift and SwiftUI, and uses Apple’s `Testing` framework for unit tests. Backend work is handled with `async/await`, and the app follows a simple MVVM-style structure: models define the domain layer, views render the UI, `AppState` acts as the shared view model and state container, and `APIClient` handles network communication.
+The project is built with Swift and SwiftUI, and uses Apple’s `Testing` framework for unit tests. Backend work is handled with `async/await`, and the app follows a simple MVVM-style structure: models define the domain layer, views render the UI, `AppState` is organized as a shared view-model layer through focused extensions, and `APIClient` handles network communication.
 
 ## Structure
-`OurMallEUApp.swift` and `ContentView.swift` bootstrap the app and own navigation. The `Models` folder contains the core domain types for products, cart items, vendor sections, orders, and payment payloads. `Services/APIClient.swift` handles product fetches and payment submission. `ViewModels/AppState.swift` contains the core business logic for catalog loading, filtering, cart updates, checkout totals, order persistence, and cancellation. The `Views` folder contains the catalog, product detail, cart, checkout, payment, orders, order details, and splash screens. `OurMallEUTests` contains the unit tests for model and state logic.
+`OurMallEUApp.swift` and `ContentView.swift` bootstrap the app and own navigation. The `Models` folder contains the core domain types for products, cart items, vendor sections, orders, and payment payloads. `Services/APIClient.swift` handles product fetches and payment submission. The `ViewModels/AppState/` folder contains the shared app-state logic, split by responsibility across catalog, cart, navigation, payment, order, lifecycle, and computed-state files. The `Views` folder contains screen views plus separate component and support subfolders. `OurMallEUTests` contains the unit tests for model and state logic.
 
 ## Product List Logic
 The product list screen loads catalog data through `AppState.refreshProducts()` and paginates with `loadNextPageIfNeeded(currentProduct:)`. At the top of the screen, users can search by keyword and open filters for category, price range, and stock availability. Below that, the screen displays a rotating carousel and then a two-column product grid. Filtering is driven by shared logic in `AppState`, matching against product name, vendor name, summary, and categories, while category filtering is powered by the `category: [String]` field on `Product`.
@@ -67,7 +67,7 @@ Add-to-cart is local-only in this prototype and stores product, selected options
 }
 ```
 
-Cancellation is currently local state logic inside `AppState`, but the supported scopes are already clear: item, vendor, and full order. A backend version of the same logic would typically accept an order id plus the cancellation scope, and optionally an item id or vendor id depending on the requested action.
+Cancellation is currently local state logic in the `AppState` order-handling layer, but the supported scopes are already clear: item, vendor, and full order. A backend version of the same logic would typically accept an order id plus the cancellation scope, and optionally an item id or vendor id depending on the requested action.
 
 ```json
 { "orderId": "order-1", "scope": "item", "itemId": "item-1" }
