@@ -28,6 +28,7 @@ final class AppState: ObservableObject {
     private let service: CommerceServicing
     private let pageSize = 6
     private var hasStarted = false
+    private var isUsingFallbackProducts = false
     private(set) var currentPage = 0
     private(set) var hasMoreProducts = true
 
@@ -136,8 +137,14 @@ final class AppState: ObservableObject {
             currentPage = firstPage.page
             hasMoreProducts = firstPage.hasMorePages
             products = firstPage.items
+            isUsingFallbackProducts = false
         } catch {
-            productErrorMessage = error.localizedDescription
+            let fallbackPage = fallbackProductPage(page: 1)
+            currentPage = fallbackPage.page
+            hasMoreProducts = fallbackPage.hasMorePages
+            products = fallbackPage.items
+            isUsingFallbackProducts = true
+            productErrorMessage = "Backend unavailable. Showing offline catalog."
         }
 
         isLoadingProducts = false
@@ -377,14 +384,22 @@ final class AppState: ObservableObject {
         guard hasMoreProducts else { return }
         isLoadingNextPage = true
 
-        do {
-            let nextPage = currentPage + 1
-            let response = try await service.fetchProducts(page: nextPage, pageSize: pageSize)
+        let nextPage = currentPage + 1
+
+        if isUsingFallbackProducts {
+            let response = fallbackProductPage(page: nextPage)
             currentPage = response.page
             hasMoreProducts = response.hasMorePages
             products.append(contentsOf: response.items)
-        } catch {
-            productErrorMessage = error.localizedDescription
+        } else {
+            do {
+                let response = try await service.fetchProducts(page: nextPage, pageSize: pageSize)
+                currentPage = response.page
+                hasMoreProducts = response.hasMorePages
+                products.append(contentsOf: response.items)
+            } catch {
+                productErrorMessage = error.localizedDescription
+            }
         }
 
         isLoadingNextPage = false
@@ -502,5 +517,20 @@ final class AppState: ObservableObject {
 
     private func syncOrderStatus(in order: inout Order) {
         order.status = order.vendorGroups.allSatisfy { $0.items.allSatisfy(\.status.isSettled) } ? .settled : .inProgress
+    }
+    
+    private func fallbackProductPage(page: Int) -> ProductPage {
+        let allProducts = Product.sampleProducts
+        let startIndex = max(0, (page - 1) * pageSize)
+        guard startIndex < allProducts.count else {
+            return ProductPage(items: [], page: page, hasMorePages: false)
+        }
+        
+        let endIndex = min(allProducts.count, startIndex + pageSize)
+        return ProductPage(
+            items: Array(allProducts[startIndex..<endIndex]),
+            page: page,
+            hasMorePages: endIndex < allProducts.count
+        )
     }
 }

@@ -19,16 +19,29 @@ struct AppStateTests {
         #expect(state.productErrorMessage == nil)
     }
 
-    @Test("Refresh products captures backend failure")
-    func refreshProductsCapturesBackendFailure() async {
+    @Test("Refresh products surfaces offline fallback message")
+    func refreshProductsSurfacesOfflineFallbackMessage() async {
         let service = MockCommerceService()
         service.fetchError = APIError.transport("offline")
         let state = AppState(service: service)
 
         await state.refreshProducts()
 
-        #expect(state.products.isEmpty)
-        #expect(state.productErrorMessage == "offline")
+        #expect(state.products.isEmpty == false)
+        #expect(state.productErrorMessage == "Backend unavailable. Showing offline catalog.")
+    }
+    
+    @Test("Refresh products falls back to local sample products when backend is unavailable")
+    func refreshProductsFallsBackToLocalSampleProductsWhenBackendIsUnavailable() async {
+        let service = MockCommerceService()
+        service.fetchError = APIError.transport("offline")
+        let state = AppState(service: service)
+        
+        await state.refreshProducts()
+        
+        #expect(state.products.isEmpty == false)
+        #expect(state.products.map(\.id) == Array(Product.sampleProducts.prefix(6)).map(\.id))
+        #expect(state.productErrorMessage == "Backend unavailable. Showing offline catalog.")
     }
 
     @Test("Next page loads when current product is near the end")
@@ -52,6 +65,19 @@ struct AppStateTests {
         try await Task.sleep(for: .milliseconds(100))
 
         #expect(state.products.map(\.id) == ["p1", "p2", "p3", "p4", "p5", "p6", "p7"])
+    }
+    
+    @Test("Fallback products also paginate when backend is unavailable")
+    func fallbackProductsAlsoPaginateWhenBackendIsUnavailable() async throws {
+        let service = MockCommerceService()
+        service.fetchError = APIError.transport("offline")
+        let state = AppState(service: service)
+        
+        await state.refreshProducts()
+        state.loadNextPageIfNeeded(currentProduct: try #require(state.products.last))
+        try await Task.sleep(for: .milliseconds(100))
+        
+        #expect(state.products.map(\.id) == Array(Product.sampleProducts.prefix(12)).map(\.id))
     }
 
     @Test("Add to cart uses default options and merges repeated selections")
