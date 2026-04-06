@@ -1,6 +1,6 @@
 # OurMallEU
 
-![OurMallEU demo](./om_compressed.gif)
+![OurMallEU demo](om_compressed.gif)
 
 ## Overview
 OurMallEU is a SwiftUI multi-vendor ecommerce app prototype. It includes a splash screen, a searchable and filterable product catalog, configurable product detail pages, a multi-vendor cart, checkout and payment flows, and an order history experience with tracking, cancellation, and refund feedback. Shared app state is coordinated through `AppState`, which is now split into focused files for catalog, cart, navigation, payment, orders, and derived state.
