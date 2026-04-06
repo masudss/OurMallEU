@@ -136,6 +136,39 @@ struct AppStateTests {
         state.toggleVendorSelection(vendor.id)
         #expect(state.selectedSections.count == 1)
     }
+    
+    @Test("Available categories are unique and sorted")
+    func availableCategoriesAreUniqueAndSorted() {
+        let state = AppState(service: MockCommerceService())
+        state.products = [
+            TestFactory.product(id: "a", category: ["electronics", "audio"]),
+            TestFactory.product(id: "b", category: ["clothing", "electronics"])
+        ]
+        
+        #expect(state.availableProductCategories == ["audio", "clothing", "electronics"])
+    }
+    
+    @Test("Product filtering matches keyword category price and stock")
+    func productFilteringMatchesKeywordCategoryPriceAndStock() {
+        let state = AppState(service: MockCommerceService())
+        state.products = [
+            TestFactory.product(id: "shoe", name: "Aero Runner", category: ["clothing"], price: 120, discountPercentage: 0, quantityRemaining: 8),
+            TestFactory.product(id: "watch", name: "Nordic Smart Watch", category: ["electronics"], price: 240, discountPercentage: 10, quantityRemaining: 0),
+            TestFactory.product(id: "tee", name: "Essential Tee", category: ["clothing"], price: 28, discountPercentage: 0, quantityRemaining: 42)
+        ]
+        
+        let clothingResults = state.filteredProducts(
+            matching: "tee",
+            filter: ProductFilter(selectedCategory: "clothing", priceFilter: .under50, inStockOnly: true)
+        )
+        let electronicsResults = state.filteredProducts(
+            matching: "",
+            filter: ProductFilter(selectedCategory: "electronics", priceFilter: .above150, inStockOnly: false)
+        )
+        
+        #expect(clothingResults.map(\.id) == ["tee"])
+        #expect(electronicsResults.map(\.id) == ["watch"])
+    }
 
     @Test("Navigation helpers append and clear routes")
     func navigationHelpersAppendAndClearRoutes() {

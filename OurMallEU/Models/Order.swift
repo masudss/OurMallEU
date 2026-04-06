@@ -28,6 +28,15 @@ enum ItemStatus: String, Codable, CaseIterable, Hashable {
     var isSettled: Bool {
         self == .delivered || self == .cancelled
     }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self).lowercased()
+        guard let value = ItemStatus(rawValue: rawValue) else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unsupported item status: \(rawValue)")
+        }
+        self = value
+    }
 }
 
 struct OrderItem: Codable, Hashable, Identifiable {

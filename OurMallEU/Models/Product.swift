@@ -8,6 +8,7 @@ struct Vendor: Codable, Hashable, Identifiable {
 struct Product: Codable, Hashable, Identifiable {
     let id: String
     let name: String
+    let category: [String]
     let imageURL: URL?
     let vendor: Vendor
     let price: Decimal
@@ -53,6 +54,39 @@ struct Product: Codable, Hashable, Identifiable {
     }
 }
 
+enum ProductPriceFilter: String, CaseIterable, Hashable, Identifiable {
+    case under50 = "Under ₦50"
+    case between50And150 = "₦50 - ₦150"
+    case above150 = "Above ₦150"
+    
+    var id: String {
+        rawValue
+    }
+    
+    func matches(price: Decimal) -> Bool {
+        switch self {
+        case .under50:
+            return price < 50
+        case .between50And150:
+            return price >= 50 && price <= 150
+        case .above150:
+            return price > 150
+        }
+    }
+}
+
+struct ProductFilter: Hashable {
+    var selectedCategory: String?
+    var priceFilter: ProductPriceFilter?
+    var inStockOnly = false
+    
+    static let `default` = ProductFilter()
+    
+    var isActive: Bool {
+        selectedCategory != nil || priceFilter != nil || inStockOnly
+    }
+}
+
 struct ProductOption: Codable, Hashable, Identifiable {
     let name: String
     let values: [String]
@@ -80,6 +114,7 @@ struct ProductPage: Hashable {
 struct ProductDTO: Decodable {
     let id: String
     let name: String
+    let category: [String]
     let imageURL: URL?
     let vendor: Vendor
     let price: Decimal
@@ -87,27 +122,14 @@ struct ProductDTO: Decodable {
     let offerEndsAt: Date?
     let quantityRemaining: Int
     let summary: String?
-    let options: [String: [String]]?
+    let options: [ProductOption]
     let status: ItemStatus?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case name
-        case imageURL = "image_url"
-        case vendor
-        case price
-        case discountPercentage = "discount_percentage"
-        case offerEndsAt = "offer_ends_at"
-        case quantityRemaining = "quantity_remaining"
-        case summary
-        case options
-        case status
-    }
 
     func toProduct() -> Product {
         Product(
             id: id,
             name: name,
+            category: category,
             imageURL: imageURL,
             vendor: vendor,
             price: price,
@@ -115,11 +137,50 @@ struct ProductDTO: Decodable {
             offerEndsAt: offerEndsAt,
             quantityRemaining: quantityRemaining,
             summary: summary ?? "A premium multi-vendor catalog product with curated options.",
-            options: (options ?? [:])
-                .map { ProductOption(name: $0.key, values: $0.value) }
-                .sorted { $0.name < $1.name },
+            options: options.sorted { $0.name < $1.name },
             status: status ?? .pending
         )
+    }
+}
+
+extension ProductDTO {
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case category
+        case imageURL
+        case image_url
+        case vendor
+        case price
+        case discountPercentage
+        case discount_percentage
+        case offerEndsAt
+        case offer_ends_at
+        case quantityRemaining
+        case quantity_remaining
+        case summary
+        case options
+        case status
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        category = try container.decodeIfPresent([String].self, forKey: .category) ?? []
+        imageURL = try container.decodeIfPresent(URL.self, forKey: .imageURL)
+            ?? container.decodeIfPresent(URL.self, forKey: .image_url)
+        vendor = try container.decode(Vendor.self, forKey: .vendor)
+        price = try container.decode(Decimal.self, forKey: .price)
+        discountPercentage = try container.decodeIfPresent(Decimal.self, forKey: .discountPercentage)
+            ?? container.decodeIfPresent(Decimal.self, forKey: .discount_percentage)
+        offerEndsAt = try container.decodeIfPresent(Date.self, forKey: .offerEndsAt)
+            ?? container.decodeIfPresent(Date.self, forKey: .offer_ends_at)
+        quantityRemaining = try container.decodeIfPresent(Int.self, forKey: .quantityRemaining)
+            ?? container.decode(Int.self, forKey: .quantity_remaining)
+        summary = try container.decodeIfPresent(String.self, forKey: .summary)
+        options = try container.decodeIfPresent([ProductOption].self, forKey: .options) ?? []
+        status = try container.decodeIfPresent(ItemStatus.self, forKey: .status)
     }
 }
 
@@ -136,6 +197,7 @@ extension Product {
         Product(
             id: "shoe-1",
             name: "Aero Runner",
+            category: ["clothing", "sports"],
             imageURL: previewImageURL(
                 fileName: "shoe.jpg",
                 fallback: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80"
@@ -154,6 +216,7 @@ extension Product {
         Product(
             id: "watch-1",
             name: "Nordic Smart Watch",
+            category: ["electronics", "wearables"],
             imageURL: previewImageURL(
                 fileName: "watch.jpg",
                 fallback: "https://images.unsplash.com/photo-1434056886845-dac89ffe9b56?auto=format&fit=crop&w=900&q=80"
@@ -171,6 +234,7 @@ extension Product {
         Product(
             id: "bag-1",
             name: "Metro Carry Bag",
+            category: ["clothing", "accessories"],
             imageURL: URL(string: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=900&q=80"),
             vendor: Vendor(id: "vendor-a", name: "BluePeak Sports"),
             price: 85,
@@ -185,6 +249,7 @@ extension Product {
         Product(
             id: "hoodie-1",
             name: "Core Street Hoodie",
+            category: ["clothing"],
             imageURL: URL(string: "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&w=900&q=80"),
             vendor: Vendor(id: "vendor-c", name: "ThreadHaus"),
             price: 72,
@@ -200,6 +265,7 @@ extension Product {
         Product(
             id: "speaker-1",
             name: "Pulse Mini Speaker",
+            category: ["electronics", "audio"],
             imageURL: URL(string: "https://images.unsplash.com/photo-1589003077984-894e133dabab?auto=format&fit=crop&w=900&q=80"),
             vendor: Vendor(id: "vendor-b", name: "NorthHub Electronics"),
             price: 96,
@@ -214,6 +280,7 @@ extension Product {
         Product(
             id: "lamp-1",
             name: "Halo Desk Lamp",
+            category: ["home"],
             imageURL: URL(string: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=80"),
             vendor: Vendor(id: "vendor-d", name: "Casa Nova"),
             price: 58,
@@ -228,6 +295,7 @@ extension Product {
         Product(
             id: "chair-1",
             name: "Contour Lounge Chair",
+            category: ["home", "furniture"],
             imageURL: URL(string: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=80"),
             vendor: Vendor(id: "vendor-d", name: "Casa Nova"),
             price: 180,
@@ -242,6 +310,7 @@ extension Product {
         Product(
             id: "tee-1",
             name: "Essential Tee",
+            category: ["clothing"],
             imageURL: URL(string: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=80"),
             vendor: Vendor(id: "vendor-c", name: "ThreadHaus"),
             price: 28,
@@ -257,6 +326,7 @@ extension Product {
         Product(
             id: "kettle-1",
             name: "Arc Electric Kettle",
+            category: ["kitchen", "home"],
             imageURL: URL(string: "https://images.unsplash.com/photo-1517705008128-361805f42e86?auto=format&fit=crop&w=900&q=80"),
             vendor: Vendor(id: "vendor-e", name: "Kitchen Fold"),
             price: 64,
@@ -271,6 +341,7 @@ extension Product {
         Product(
             id: "blender-1",
             name: "Vivid Blend Pro",
+            category: ["kitchen", "home"],
             imageURL: URL(string: "https://images.unsplash.com/photo-1570222094114-d054a817e56b?auto=format&fit=crop&w=900&q=80"),
             vendor: Vendor(id: "vendor-e", name: "Kitchen Fold"),
             price: 135,
@@ -285,6 +356,7 @@ extension Product {
         Product(
             id: "camera-1",
             name: "Vista Pocket Camera",
+            category: ["electronics", "camera"],
             imageURL: URL(string: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=900&q=80"),
             vendor: Vendor(id: "vendor-b", name: "NorthHub Electronics"),
             price: 320,
@@ -299,6 +371,7 @@ extension Product {
         Product(
             id: "sofa-1",
             name: "Cloud Corner Sofa",
+            category: ["home", "furniture"],
             imageURL: URL(string: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=80"),
             vendor: Vendor(id: "vendor-d", name: "Casa Nova"),
             price: 720,
@@ -313,6 +386,7 @@ extension Product {
         Product(
             id: "headphone-1",
             name: "QuietPulse Headphones",
+            category: ["electronics", "audio"],
             imageURL: URL(string: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=80"),
             vendor: Vendor(id: "vendor-b", name: "NorthHub Electronics"),
             price: 210,
@@ -327,6 +401,7 @@ extension Product {
         Product(
             id: "boot-1",
             name: "Trailmark Boots",
+            category: ["clothing", "sports"],
             imageURL: URL(string: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&w=900&q=80"),
             vendor: Vendor(id: "vendor-a", name: "BluePeak Sports"),
             price: 145,
@@ -342,6 +417,7 @@ extension Product {
         Product(
             id: "bottle-1",
             name: "Thermo Steel Bottle",
+            category: ["sports", "accessories"],
             imageURL: URL(string: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=900&q=80"),
             vendor: Vendor(id: "vendor-a", name: "BluePeak Sports"),
             price: 32,

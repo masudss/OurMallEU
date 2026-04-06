@@ -31,19 +31,11 @@ protocol CommerceServicing {
 struct APIConfiguration {
     let baseURL: URL
 
-    static let live = APIConfiguration(baseURL: URL(string: "https://example.com/api")!)
+    static let live = APIConfiguration(baseURL: URL(string: "https://mp160a575ce3a6471b72.free.beeceptor.com")!)
 }
 
-private struct ProductPageDTO: Decodable {
-    let items: [ProductDTO]
-    let page: Int
-    let hasMorePages: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case items
-        case page
-        case hasMorePages = "has_more_pages"
-    }
+private struct ProductResponseDTO: Decodable {
+    let products: [ProductDTO]
 }
 
 final class CommerceAPIClient: CommerceServicing {
@@ -62,31 +54,18 @@ final class CommerceAPIClient: CommerceServicing {
     }
 
     func fetchProducts(page: Int, pageSize: Int) async throws -> ProductPage {
-        var components = URLComponents(url: configuration.baseURL.appending(path: "products"), resolvingAgainstBaseURL: false)
-        components?.queryItems = [
-            URLQueryItem(name: "page", value: "\(page)"),
-            URLQueryItem(name: "page_size", value: "\(pageSize)")
-        ]
-
-        guard let url = components?.url else {
-            throw APIError.invalidResponse
-        }
+        let url = configuration.baseURL.appending(path: "data")
 
         do {
             let (data, response) = try await session.data(from: url)
             try validate(response)
 
-            if let pageResponse = try? decoder.decode(ProductPageDTO.self, from: data) {
-                return ProductPage(
-                    items: pageResponse.items.map { $0.toProduct() },
-                    page: pageResponse.page,
-                    hasMorePages: pageResponse.hasMorePages
-                )
+            if let response = try? decoder.decode(ProductResponseDTO.self, from: data) {
+                return paginatedResponse(for: response.products.map { $0.toProduct() }, page: page, pageSize: pageSize)
             }
 
             if let flatProducts = try? decoder.decode([ProductDTO].self, from: data) {
-                let products = flatProducts.map { $0.toProduct() }
-                return ProductPage(items: products, page: page, hasMorePages: products.count >= pageSize)
+                return paginatedResponse(for: flatProducts.map { $0.toProduct() }, page: page, pageSize: pageSize)
             }
 
             throw APIError.decodingFailed
@@ -123,6 +102,20 @@ final class CommerceAPIClient: CommerceServicing {
         guard (200...299).contains(httpResponse.statusCode) else {
             throw APIError.badStatusCode(httpResponse.statusCode)
         }
+    }
+    
+    private func paginatedResponse(for products: [Product], page: Int, pageSize: Int) -> ProductPage {
+        let startIndex = max(0, (page - 1) * pageSize)
+        guard startIndex < products.count else {
+            return ProductPage(items: [], page: page, hasMorePages: false)
+        }
+        
+        let endIndex = min(products.count, startIndex + pageSize)
+        return ProductPage(
+            items: Array(products[startIndex..<endIndex]),
+            page: page,
+            hasMorePages: endIndex < products.count
+        )
     }
 }
 

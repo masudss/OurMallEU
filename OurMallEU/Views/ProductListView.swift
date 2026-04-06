@@ -4,9 +4,16 @@ struct ProductListView: View {
     @EnvironmentObject private var appState: AppState
     @State private var productPendingConfirmation: Product?
     @State private var showAddedToCartIndicator = false
+    @State private var searchText = ""
+    @State private var productFilter = ProductFilter.default
+    @State private var showFilterSheet = false
 
     private let horizontalPadding: CGFloat = 16
     private let gridSpacing: CGFloat = 14
+    
+    private var filteredProducts: [Product] {
+        appState.filteredProducts(matching: searchText, filter: productFilter)
+    }
 
     var body: some View {
         Group {
@@ -27,6 +34,42 @@ struct ProductListView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
+                        HStack(spacing: 12) {
+                            HStack(spacing: 10) {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundStyle(.secondary)
+                                
+                                TextField("Search products", text: $searchText)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            
+                            Button {
+                                showFilterSheet = true
+                            } label: {
+                                ZStack(alignment: .topTrailing) {
+                                    Image(systemName: "line.3.horizontal.decrease.circle")
+                                        .font(.title3)
+                                        .foregroundStyle(.primary)
+                                        .padding(12)
+                                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                    
+                                    if productFilter.isActive {
+                                        Circle()
+                                            .fill(Color.blue)
+                                            .frame(width: 10, height: 10)
+                                            .offset(x: 3, y: -3)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Filters")
+                        }
+                        .padding(.horizontal, horizontalPadding)
+                        
                         HeroCarouselView(banners: appState.heroBanners)
                             .padding(.horizontal, horizontalPadding)
 
@@ -36,41 +79,57 @@ struct ProductListView: View {
                             Text("Multi-vendor picks with live stock, offers, and configurable options.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                            
+                            if !searchText.isEmpty || productFilter.isActive {
+                                Text("\(filteredProducts.count) result\(filteredProducts.count == 1 ? "" : "s")")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         .padding(.horizontal, horizontalPadding)
 
-                        GeometryReader { geometry in
-                            let contentWidth = geometry.size.width - (horizontalPadding * 2)
-                            let cardWidth = floor((contentWidth - gridSpacing) / 2)
-                            let rows = productRows
+                        if filteredProducts.isEmpty {
+                            ContentUnavailableView(
+                                "No products found",
+                                systemImage: "magnifyingglass",
+                                description: Text("Try a different keyword or clear some filters.")
+                            )
+                            .padding(.horizontal, horizontalPadding)
+                            .padding(.top, 40)
+                        } else {
+                            GeometryReader { geometry in
+                                let contentWidth = geometry.size.width - (horizontalPadding * 2)
+                                let cardWidth = floor((contentWidth - gridSpacing) / 2)
+                                let rows = productRows
 
-                            VStack(alignment: .leading, spacing: gridSpacing) {
-                                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                                    HStack(alignment: .top, spacing: gridSpacing) {
-                                        ForEach(row) { product in
-                                            ProductGridCard(
-                                                product: product,
-                                                quantityInCart: appState.quantityInCart(for: product),
-                                                onTap: { appState.goToProduct(product) },
-                                                onAddToCart: { productPendingConfirmation = product }
-                                            )
-                                            .frame(width: cardWidth)
-                                            .onAppear {
-                                                appState.loadNextPageIfNeeded(currentProduct: product)
+                                VStack(alignment: .leading, spacing: gridSpacing) {
+                                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                                        HStack(alignment: .top, spacing: gridSpacing) {
+                                            ForEach(row) { product in
+                                                ProductGridCard(
+                                                    product: product,
+                                                    quantityInCart: appState.quantityInCart(for: product),
+                                                    onTap: { appState.goToProduct(product) },
+                                                    onAddToCart: { productPendingConfirmation = product }
+                                                )
+                                                .frame(width: cardWidth)
+                                                .onAppear {
+                                                    appState.loadNextPageIfNeeded(currentProduct: product)
+                                                }
                                             }
-                                        }
-
-                                        if row.count == 1 {
-                                            Color.clear
-                                                .frame(width: cardWidth, height: 1)
+                                            
+                                            if row.count == 1 {
+                                                Color.clear
+                                                    .frame(width: cardWidth, height: 1)
+                                            }
                                         }
                                     }
                                 }
+                                .frame(width: contentWidth, alignment: .leading)
+                                .padding(.horizontal, horizontalPadding)
                             }
-                            .frame(width: contentWidth, alignment: .leading)
-                            .padding(.horizontal, horizontalPadding)
+                            .frame(height: gridHeight(for: filteredProducts.count))
                         }
-                        .frame(height: gridHeight(for: appState.products.count))
 
                         if appState.isLoadingNextPage {
                             HStack {
@@ -94,6 +153,12 @@ struct ProductListView: View {
             }
         }
         .navigationTitle("Products")
+        .sheet(isPresented: $showFilterSheet) {
+            ProductFilterSheet(
+                availableCategories: appState.availableProductCategories,
+                filter: $productFilter
+            )
+        }
         .overlay {
             if showAddedToCartIndicator {
                 AddedToCartOverlay()
@@ -183,8 +248,8 @@ struct ProductListView: View {
     }
 
     private var productRows: [[Product]] {
-        stride(from: 0, to: appState.products.count, by: 2).map { index in
-            Array(appState.products[index..<min(index + 2, appState.products.count)])
+        stride(from: 0, to: filteredProducts.count, by: 2).map { index in
+            Array(filteredProducts[index..<min(index + 2, filteredProducts.count)])
         }
     }
 
@@ -198,6 +263,58 @@ struct ProductListView: View {
             await MainActor.run {
                 withAnimation(.easeOut(duration: 0.2)) {
                     showAddedToCartIndicator = false
+                }
+            }
+        }
+    }
+}
+
+private struct ProductFilterSheet: View {
+    let availableCategories: [String]
+    @Binding var filter: ProductFilter
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Category") {
+                    Picker("Category", selection: $filter.selectedCategory) {
+                        Text("All categories")
+                            .tag(Optional<String>.none)
+                        ForEach(availableCategories, id: \.self) { category in
+                            Text(category.capitalized)
+                                .tag(Optional(category))
+                        }
+                    }
+                }
+                
+                Section("Price") {
+                    Picker("Price range", selection: $filter.priceFilter) {
+                        Text("All prices")
+                            .tag(Optional<ProductPriceFilter>.none)
+                        ForEach(ProductPriceFilter.allCases) { priceFilter in
+                            Text(priceFilter.rawValue)
+                                .tag(Optional(priceFilter))
+                        }
+                    }
+                }
+                
+                Section("Stock") {
+                    Toggle("In stock only", isOn: $filter.inStockOnly)
+                }
+            }
+            .navigationTitle("Filters")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Reset") {
+                        filter = .default
+                    }
+                }
+                
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
                 }
             }
         }

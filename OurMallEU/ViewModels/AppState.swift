@@ -56,6 +56,11 @@ final class AppState: ObservableObject {
             !order.allItems.isEmpty && order.allItems.allSatisfy(\.status.isSettled)
         }
     }
+    
+    var availableProductCategories: [String] {
+        Array(Set(products.flatMap(\.category)))
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
 
     var vendorSections: [VendorCartSection] {
         let grouped = Dictionary(grouping: cartItems.values) { $0.product.vendor }
@@ -184,6 +189,34 @@ final class AppState: ObservableObject {
         cartItems.values
             .filter { $0.product.id == product.id }
             .reduce(0) { $0 + $1.quantity }
+    }
+    
+    func filteredProducts(matching query: String, filter: ProductFilter) -> [Product] {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        return products.filter { product in
+            let matchesQuery: Bool
+            if normalizedQuery.isEmpty {
+                matchesQuery = true
+            } else {
+                let searchableText = [
+                    product.name,
+                    product.vendor.name,
+                    product.summary,
+                    product.category.joined(separator: " ")
+                ]
+                .joined(separator: " ")
+                matchesQuery = searchableText.localizedCaseInsensitiveContains(normalizedQuery)
+            }
+            
+            let matchesCategory = filter.selectedCategory.map { category in
+                product.category.contains { $0.caseInsensitiveCompare(category) == .orderedSame }
+            } ?? true
+            let matchesPrice = filter.priceFilter?.matches(price: product.discountedPrice) ?? true
+            let matchesStock = filter.inStockOnly ? product.inStock : true
+            
+            return matchesQuery && matchesCategory && matchesPrice && matchesStock
+        }
     }
 
     func updateQuantity(for itemID: String, quantity: Int) {
