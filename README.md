@@ -6,6 +6,11 @@ OurMallEU is a SwiftUI multi-vendor ecommerce app prototype. It includes a splas
 ## Technologies and Architecture
 The project is built with Swift and SwiftUI, and uses Apple’s `Testing` framework for unit tests. Backend work is handled with `async/await`, and the app follows a simple MVVM-style structure: models define the domain layer, views render the UI, `AppState` is organized as a shared view-model layer through focused extensions, and `APIClient` handles network communication.
 
+## Run and Distribution
+Clone the repository and open `OurMallEU.xcodeproj` in Xcode on a Mac with a recent iOS SDK installed. Select either an iPhone simulator or a connected Apple Developer-signed device, then build and run with Xcode. On another machine, you may need to set your own signing team in the app target before running on a physical device.
+
+For TestFlight, archive the app from Xcode, upload the build to App Store Connect, create an internal or external TestFlight group, and assign the uploaded build to that group for testing.
+
 ## Structure
 `OurMallEUApp.swift` and `ContentView.swift` bootstrap the app and own navigation. The `Models` folder contains the core domain types for products, cart items, vendor sections, orders, and payment payloads. `Services/APIClient.swift` handles product fetches and payment submission. The `ViewModels/AppState/` folder contains the shared app-state logic, split by responsibility across catalog, cart, navigation, payment, order, lifecycle, and computed-state files. The `Views` folder contains screen views plus separate component and support subfolders. `OurMallEUTests` contains the unit tests for model and state logic.
 
